@@ -1,53 +1,39 @@
-from flask import Flask, render_template, Response, request
+from flask import Flask, render_template, request, jsonify
 import cv2
+import numpy as np
+import base64
 
 app = Flask(__name__)
-camera = cv2.VideoCapture(0)
 current_mode = "normal"
-
-def generate_frames():
-    global current_mode
-    while True:
-        success, frame = camera.read()
-        if not success:
-            break
-        else:
-            if current_mode == "grey":
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            elif current_mode == "heatmap":
-                grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                frame = cv2.applyColorMap(grey, cv2.COLORMAP_JET)
-
-            ret, buffer = cv2.imencode('.jpg', frame)
-            frame = buffer.tobytes()
-
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/video_feed')
-def video_feed():
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
 @app.route('/set_mode/<mode>')
 def set_mode(mode):
     global current_mode
     current_mode = mode
-    return f"Mode changed to {mode}"
+    return jsonify({"status": "ok", "mode": mode})
 
-camera_index = 0
+@app.route('/process_frame', methods=['POST'])
+def process_frame():
+    global current_mode
+    data = request.json['image']
+    header, encoded = data.split(",", 1)
+    nparr = np.frombuffer(base64.b64decode(encoded), np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-@app.route('/switch_camera')
-def switch_camera():
-    global camera, camera_index
-    camera_index = 1 if camera_index == 0 else 0  
-    camera.release()
-    camera = cv2.VideoCapture(camera_index)
-    return "OK"
+    if current_mode == "grey":
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+    elif current_mode == "heatmap":
+        grey = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        frame = cv2.applyColorMap(grey, cv2.COLORMAP_JET)
 
+    _, buffer = cv2.imencode('.jpg', frame)
+    processed_base64 = base64.b64encode(buffer).decode('utf-8')
+    return jsonify({"image": f"data:image/jpeg;base64,{processed_base64}"})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()
