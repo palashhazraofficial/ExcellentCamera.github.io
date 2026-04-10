@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excellent Camera</title>
+
+    <link href="https://googleapis.com" rel="stylesheet">
+    <link rel="stylesheet" href="https://cloudflare.com">
+    
+    <style>
+        :root {
+            --primary: #6366f1;
+            --dark: #1e293b;
+            --light: #f8fafc;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--dark);
+            color: var(--light);
+            font-family: 'Poppins', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-placeholder {
+            width: 45px;
+            height: 45px;
+            background: var(--primary);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .logo-placeholder img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; 
+        }
+
+        .video-container {
+            position: relative;
+            width: 90%;
+            max-width: 600px;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            border: 2px solid #334155;
+            background: #000;
+        }
+
+        .video-container img {
+            width: 100%;
+            display: block;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 30px;
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 15px 25px;
+            border-radius: 30px;
+            display: flex;
+            gap: 12px;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+        }
+
+        .btn {
+            border: none;
+            background: #334155;
+            color: white;
+            padding: 10px 18px;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 11px;
+            gap: 5px;
+            min-width: 70px;
+        }
+
+        .btn i { font-size: 18px; }
+        .btn:hover { background: var(--primary); transform: translateY(-2px); }
+        .btn.active { background: var(--primary); box-shadow: 0 0 15px var(--primary); }
+        .switch-btn { background: #f43f5e; }
+        .switch-btn:hover { background: #e11d48; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="logo-placeholder">
+            <img src="{{ url_for('static', filename='icon.png') }}" alt="Logo">
+        </div>
+        <h2 style="margin:0">Excellent<span style="color:var(--primary)">Camera</span></h2>
+    </div>
+
+    <div class="video-container">
+        <img id="feed" src="{{ url_for('video_feed') }}" alt="Live Stream">
+    </div>
+
+    <div class="controls">
+        <button class="btn active" id="btn-normal" onclick="changeMode('normal')">
+            <i class="fas fa-video"></i>
+            Normal
+        </button>
+        <button class="btn" id="btn-grey" onclick="changeMode('grey')">
+            <i class="fas fa-ghost"></i>
+            Grey
+        </button>
+        <button class="btn" id="btn-heatmap" onclick="changeMode('heatmap')">
+            <i class="fas fa-fire"></i>
+            Heat
+        </button>
+        <button class="btn switch-btn" onclick="switchCamera()">
+            <i class="fas fa-sync-alt"></i>
+            Flip
+        </button>
+    </div>
+
+    <script>
+        function changeMode(mode) {
+            document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+            const activeBtn = document.getElementById('btn-' + mode);
+            if(activeBtn) activeBtn.classList.add('active');
+            
+            fetch('/set_mode/' + mode);
+        }
+
+        function switchCamera() {
+            fetch('/switch_camera')
+                .then(() => {
+                    const img = document.getElementById('feed');
+                    img.src = "{{ url_for('video_feed') }}?" + new Date().getTime();
+                });
+        }
+    </script>
+</body>
+</html>
+
