@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excellent Camera</title>
-
+    
+    <!-- Working Fonts and Icons -->
     <link href="https://googleapis.com" rel="stylesheet">
     <link rel="stylesheet" href="https://cloudflare.com">
     
@@ -63,9 +64,12 @@
             background: #000;
         }
 
-        .video-container img {
+        video { display: none; }
+
+        #display {
             width: 100%;
             display: block;
+            border-radius: 20px;
         }
 
         .controls {
@@ -78,6 +82,7 @@
             display: flex;
             gap: 12px;
             box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+            z-index: 100;
         }
 
         .btn {
@@ -99,6 +104,7 @@
         .btn i { font-size: 18px; }
         .btn:hover { background: var(--primary); transform: translateY(-2px); }
         .btn.active { background: var(--primary); box-shadow: 0 0 15px var(--primary); }
+        
         .switch-btn { background: #f43f5e; }
         .switch-btn:hover { background: #e11d48; }
     </style>
@@ -109,49 +115,102 @@
         <div class="logo-placeholder">
             <img src="{{ url_for('static', filename='icon.png') }}" alt="Logo">
         </div>
-        <h2 style="margin:0">Excellent<span style="color:var(--primary)">Camera</span></h2>
+        <h2 style="margin:0">Excellent <span style="color:var(--primary)">Camera</span></h2>
     </div>
 
     <div class="video-container">
-        <img id="feed" src="{{ url_for('video_feed') }}" alt="Live Stream">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+        <img id="display" src="" alt="Connecting to Camera...">
     </div>
 
     <div class="controls">
         <button class="btn active" id="btn-normal" onclick="changeMode('normal')">
-            <i class="fas fa-video"></i>
-            Normal
+            <i class="fas fa-video"></i>Normal
         </button>
         <button class="btn" id="btn-grey" onclick="changeMode('grey')">
-            <i class="fas fa-ghost"></i>
-            Grey
+            <i class="fas fa-ghost"></i>Grey
         </button>
         <button class="btn" id="btn-heatmap" onclick="changeMode('heatmap')">
-            <i class="fas fa-fire"></i>
-            Heat
+            <i class="fas fa-fire"></i>Heat
         </button>
         <button class="btn switch-btn" onclick="switchCamera()">
-            <i class="fas fa-sync-alt"></i>
-            Flip
+            <i class="fas fa-sync-alt"></i>Flip
         </button>
     </div>
 
     <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const display = document.getElementById('display');
+        let currentFacingMode = 'user'; // 'user' for front, 'environment' for back
+
+        // Start the user's camera
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: currentFacingMode } 
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("Camera error: ", err);
+                alert("Please allow camera access to use this app.");
+            }
+        }
+
         function changeMode(mode) {
+            // Update Buttons UI
             document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
             const activeBtn = document.getElementById('btn-' + mode);
             if(activeBtn) activeBtn.classList.add('active');
             
+            // Sync mode with Flask
             fetch('/set_mode/' + mode);
         }
 
         function switchCamera() {
-            fetch('/switch_camera')
-                .then(() => {
-                    const img = document.getElementById('feed');
-                    img.src = "{{ url_for('video_feed') }}?" + new Date().getTime();
-                });
+            currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+            startCamera();
         }
+
+        // Capture frame, send to Flask, and display result
+        function processFrame() {
+            if (video.paused || video.ended) return;
+
+            // Draw current video frame to hidden canvas
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert to Base64 (JPEG)
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+
+            // Send to Flask
+            fetch('/process_frame', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: dataUrl })
+            })
+            .then(res => res.json())
+            .then(data => {
+                display.src = data.image; // Show filtered image
+                requestAnimationFrame(processFrame); // Next frame
+            })
+            .catch(err => {
+                console.error("Processing error:", err);
+                setTimeout(processFrame, 1000); // Retry after 1s
+            });
+        }
+
+        // Start everything
+        video.addEventListener('play', () => {
+            processFrame();
+        });
+        
+        startCamera();
     </script>
 </body>
 </html>
+
 
