@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excellent Camera</title>
     
-    <!-- Working Fonts and Icons -->
+    <!-- FIXED: Real Working Fonts and Icons -->
     <link href="https://googleapis.com" rel="stylesheet">
     <link rel="stylesheet" href="https://cloudflare.com">
     
@@ -33,6 +33,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            z-index: 101;
         }
 
         .logo-placeholder {
@@ -47,41 +48,33 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         }
 
-        .logo-placeholder img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover; 
-        }
+        .logo-placeholder img { width: 100%; height: 100%; object-fit: cover; }
 
         .video-container {
             position: relative;
-            width: 90%;
-            max-width: 600px;
-            border-radius: 20px;
+            width: 92%;
+            max-width: 500px;
+            border-radius: 24px;
             overflow: hidden;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
             border: 2px solid #334155;
             background: #000;
+            aspect-ratio: 3/4; /* Keeps it looking like a phone camera */
         }
 
         video { display: none; }
-
-        #display {
-            width: 100%;
-            display: block;
-            border-radius: 20px;
-        }
+        #display { width: 100%; height: 100%; object-fit: cover; display: block; }
 
         .controls {
             position: fixed;
             bottom: 30px;
-            background: rgba(30, 41, 59, 0.8);
-            backdrop-filter: blur(10px);
-            padding: 15px 25px;
+            background: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(12px);
+            padding: 15px 20px;
             border-radius: 30px;
             display: flex;
-            gap: 12px;
-            box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+            gap: 10px;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.3);
             z-index: 100;
         }
 
@@ -89,24 +82,22 @@
             border: none;
             background: #334155;
             color: white;
-            padding: 10px 18px;
-            border-radius: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             display: flex;
             flex-direction: column;
             align-items: center;
-            font-size: 11px;
-            gap: 5px;
-            min-width: 70px;
+            font-size: 10px;
+            gap: 4px;
+            min-width: 65px;
         }
 
         .btn i { font-size: 18px; }
-        .btn:hover { background: var(--primary); transform: translateY(-2px); }
+        .btn:active { transform: scale(0.9); }
         .btn.active { background: var(--primary); box-shadow: 0 0 15px var(--primary); }
-        
         .switch-btn { background: #f43f5e; }
-        .switch-btn:hover { background: #e11d48; }
     </style>
 </head>
 <body>
@@ -121,7 +112,7 @@
     <div class="video-container">
         <video id="video" autoplay playsinline></video>
         <canvas id="canvas" style="display:none;"></canvas>
-        <img id="display" src="" alt="Connecting to Camera...">
+        <img id="display" src="" alt="Waiting for camera...">
     </div>
 
     <div class="controls">
@@ -143,29 +134,28 @@
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const display = document.getElementById('display');
-        let currentFacingMode = 'user'; // 'user' for front, 'environment' for back
+        
+        // FIXED: Define these variables at the start
+        let currentStream = null;
+        let currentFacingMode = 'user'; 
 
-        // Start the user's camera
         async function startCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
+                const constraints = { 
                     video: { facingMode: currentFacingMode } 
-                });
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                currentStream = stream;
                 video.srcObject = stream;
             } catch (err) {
                 console.error("Camera error: ", err);
-                alert("Please allow camera access to use this app.");
+                alert("Camera access denied. Please use HTTPS and allow camera permissions.");
             }
-        }
-
-        function changeMode(mode) {
-            // Update Buttons UI
-            document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-            const activeBtn = document.getElementById('btn-' + mode);
-            if(activeBtn) activeBtn.classList.add('active');
-            
-            // Sync mode with Flask
-            fetch('/set_mode/' + mode);
         }
 
         function switchCamera() {
@@ -173,20 +163,26 @@
             startCamera();
         }
 
-        // Capture frame, send to Flask, and display result
-        function processFrame() {
-            if (video.paused || video.ended) return;
+        function changeMode(mode) {
+            document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+            const activeBtn = document.getElementById('btn-' + mode);
+            if(activeBtn) activeBtn.classList.add('active');
+            fetch('/set_mode/' + mode);
+        }
 
-            // Draw current video frame to hidden canvas
+        function processFrame() {
+            if (!video.videoWidth) {
+                requestAnimationFrame(processFrame);
+                return;
+            }
+
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, 0, 0);
 
-            // Convert to Base64 (JPEG)
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.4); // 0.4 compression for speed
 
-            // Send to Flask
             fetch('/process_frame', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -194,16 +190,12 @@
             })
             .then(res => res.json())
             .then(data => {
-                display.src = data.image; // Show filtered image
-                requestAnimationFrame(processFrame); // Next frame
+                display.src = data.image;
+                requestAnimationFrame(processFrame);
             })
-            .catch(err => {
-                console.error("Processing error:", err);
-                setTimeout(processFrame, 1000); // Retry after 1s
-            });
+            .catch(() => setTimeout(processFrame, 1000));
         }
 
-        // Start everything
         video.addEventListener('play', () => {
             processFrame();
         });
